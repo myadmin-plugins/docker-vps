@@ -1,0 +1,1 @@
+/root/cpaneldirect/provirted.phar reset-password --virt=docker {$vps_vzid|escapeshellarg};

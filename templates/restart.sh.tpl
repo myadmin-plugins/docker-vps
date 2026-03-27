@@ -1,0 +1,1 @@
+/root/cpaneldirect/provirted.phar restart --virt=docker {$vps_vzid|escapeshellarg};

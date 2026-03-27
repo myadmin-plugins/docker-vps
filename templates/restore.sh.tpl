@@ -1,0 +1,1 @@
+screen -dmS backup{$vps_id} /root/cpaneldirect/provirted.phar restore --virt=docker{if $module == 'quickservers'} --all{/if} {$param1|escapeshellarg} {$param2|escapeshellarg} {$vps_vzid|escapeshellarg} {$vps_id};

@@ -1,0 +1,1 @@
+/root/cpaneldirect/provirted.phar block-smtp --virt=docker {$vps_vzid|escapeshellarg} {$vps_id};

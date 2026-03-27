@@ -1,0 +1,1 @@
+/root/cpaneldirect/provirted.phar add-ip --virt=docker {$vps_vzid|escapeshellarg} {$param|escapeshellarg};

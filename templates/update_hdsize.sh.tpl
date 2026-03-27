@@ -1,0 +1,1 @@
+/root/cpaneldirect/provirted.phar update --virt=docker --hd={($settings.slice_hd * $vps_slices) + $settings.additional_hd} {$vps_vzid};

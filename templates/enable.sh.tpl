@@ -1,0 +1,1 @@
+/root/cpaneldirect/provirted.phar enable --virt=docker {$vps_vzid|escapeshellarg};

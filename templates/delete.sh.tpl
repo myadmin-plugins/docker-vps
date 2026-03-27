@@ -1,0 +1,1 @@
+/root/cpaneldirect/provirted.phar delete --virt=docker --order-id={$vps_id} {$vps_vzid|escapeshellarg};

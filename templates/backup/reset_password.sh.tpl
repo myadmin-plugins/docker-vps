@@ -1,0 +1,1 @@
+/root/cpaneldirect/vps_docker_setup_password_clear.sh {$vps_vzid};

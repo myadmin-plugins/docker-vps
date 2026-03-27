@@ -1,0 +1,1 @@
+/root/cpaneldirect/provirted.phar remove-ip --virt=docker {$vps_vzid|escapeshellarg} {$param|escapeshellarg};

@@ -1,0 +1,43 @@
+{
+	"name": "detain/myadmin-docker-vps",
+	"type": "myadmin-plugin",
+	"description": "MyAdmin DOCKER VPS plugin — provides service activation, deactivation, queue processing, and settings management for DOCKER-based virtual private servers.",
+	"keywords": [
+		"docker",
+		"vps",
+		"virtualization",
+		"myadmin",
+		"plugin",
+		"administration"
+	],
+	"license": "LGPL-2.1-only",
+	"authors": [
+		{
+			"name": "Joe Huss",
+			"homepage": "https:\/\/my.interserver.net\/"
+		}
+	],
+	"config": {
+		"bin-dir": "vendor\/bin",
+		"minimum-stability": "dev"
+	},
+	"require": {
+		"php": ">=5.0.0",
+		"ext-soap": "*",
+		"symfony/event-dispatcher": "^5.0@stable",
+		"detain/myadmin-plugin-installer": "dev-master"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^9.6"
+	},
+	"autoload": {
+		"psr-4": {
+			"Detain\\MyAdminDocker\\": "src/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"Detain\\MyAdminDocker\\Tests\\": "tests/"
+		}
+	}
+}
