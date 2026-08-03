@@ -15,6 +15,23 @@ use Symfony\Component\EventDispatcher\GenericEvent;
  */
 class PluginTest extends TestCase
 {
+    /** A service type this plugin owns. */
+    private const OWNED_TYPE = 'define.DOCKER';
+
+    /** A service type belonging to some other VPS plugin. */
+    private const FOREIGN_TYPE = 'define.KVM';
+
+    public static function setUpBeforeClass(): void
+    {
+        require_once __DIR__.'/Stubs.php';
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        FrameworkState::reset();
+    }
+
     /**
      * Tests that the Plugin class can be instantiated.
      *
@@ -27,13 +44,87 @@ class PluginTest extends TestCase
     }
 
     /**
-     * Tests that the static $name property contains the expected value.
+     * Tests that a deactivation this plugin owns is attributed to it in the log.
+     *
+     * This replaces testNamePropertyIsDockerVps(), which asserted
+     * Plugin::$name === 'DOCKER VPS' and broke when the display name was cased as
+     * 'Docker VPS'. The literal casing of a display string is not behaviour. What the
+     * property is actually FOR is identifying this plugin in the operational log when
+     * one of its hooks fires, so that is what is asserted here.
      *
      * @return void
      */
-    public function testNamePropertyIsDockerVps(): void
+    public function testDeactivationIsLoggedUnderThePluginName(): void
     {
-        $this->assertSame('DOCKER VPS', Plugin::$name);
+        $event = new GenericEvent(new StubService(501, 4242), ['type' => self::OWNED_TYPE]);
+
+        Plugin::getDeactivate($event);
+
+        $this->assertStringContainsString(
+            Plugin::$name,
+            FrameworkState::logText(),
+            'a deactivation should be attributed to this plugin by name'
+        );
+        $this->assertStringContainsString('Deactivation', FrameworkState::logText());
+        $this->assertSame(
+            [Plugin::$module],
+            array_unique(array_column(FrameworkState::$logs, 'module')),
+            'the log entry should be filed against the module this plugin extends'
+        );
+    }
+
+    /**
+     * Tests that deactivating a service this plugin owns enqueues a delete for the host.
+     *
+     * @return void
+     */
+    public function testDeactivationEnqueuesDeleteForTheService(): void
+    {
+        $event = new GenericEvent(new StubService(501, 4242), ['type' => self::OWNED_TYPE]);
+
+        Plugin::getDeactivate($event);
+
+        $this->assertCount(1, RecordingHistory::$entries);
+        $this->assertSame('vpsqueue', RecordingHistory::$entries[0]['queue']);
+        $this->assertSame('delete', RecordingHistory::$entries[0]['action']);
+        $this->assertSame(501, RecordingHistory::$entries[0]['id']);
+        $this->assertSame(4242, RecordingHistory::$entries[0]['custid']);
+    }
+
+    /**
+     * Tests that the plugin keeps its hands off service types it does not own.
+     *
+     * Every handler is guarded by a get_service_define() membership check. Getting that
+     * wrong would make this plugin queue Docker shell scripts against KVM or Windows
+     * guests, so the guard is the most important behaviour it has.
+     *
+     * @return void
+     */
+    public function testDeactivationIgnoresForeignServiceTypes(): void
+    {
+        $event = new GenericEvent(new StubService(501, 4242), ['type' => self::FOREIGN_TYPE]);
+
+        Plugin::getDeactivate($event);
+
+        $this->assertSame([], FrameworkState::$logs, 'a foreign service type must not be logged by this plugin');
+        $this->assertSame([], RecordingHistory::$entries, 'a foreign service type must not be enqueued');
+    }
+
+    /**
+     * Tests that both Docker service types this plugin sells are handled.
+     *
+     * @return void
+     */
+    public function testBothDockerServiceTypesAreHandled(): void
+    {
+        foreach (['define.DOCKER', 'define.DOCKER_STORAGE'] as $type) {
+            FrameworkState::reset();
+            $event = new GenericEvent(new StubService(), ['type' => $type]);
+
+            Plugin::getDeactivate($event);
+
+            $this->assertCount(1, RecordingHistory::$entries, "service type {$type} should be handled");
+        }
     }
 
     /**
@@ -48,14 +139,100 @@ class PluginTest extends TestCase
     }
 
     /**
-     * Tests that the description mentions DOCKER technology.
+     * Tests that a queued action renders this plugin's own shell template.
+     *
+     * This replaces testDescriptionMentionsDocker(), which grepped the marketing blurb
+     * for the substring 'DOCKER'. Prose in a description property has no behaviour
+     * attached and broke on a casing change. The behaviour worth pinning is that the
+     * queue hook resolves an action to a template shipped by THIS package and appends
+     * the rendered script to the event's output.
      *
      * @return void
      */
-    public function testDescriptionMentionsDocker(): void
+    public function testQueueRendersThisPackagesTemplateAndAppendsOutput(): void
     {
-        $this->assertStringContainsString('DOCKER', Plugin::$description);
-        $this->assertStringContainsString('Kernel-based Virtual Machine', Plugin::$description);
+        $event = new GenericEvent($this->serviceInfo('delete'), [
+            'type' => self::OWNED_TYPE,
+            'output' => 'pre-existing;',
+        ]);
+
+        Plugin::getQueue($event);
+
+        $this->assertCount(1, StubSmarty::$fetched, 'exactly one template should be rendered');
+        $this->assertStringEndsWith('/templates/delete.sh.tpl', StubSmarty::$fetched[0]);
+        $this->assertFileExists(
+            StubSmarty::$fetched[0],
+            'the queue hook must render a template that this package actually ships'
+        );
+        $this->assertSame(
+            'pre-existing;#rendered:delete.sh.tpl',
+            $event['output'],
+            'rendered script must be appended to, not replace, the existing queue output'
+        );
+        $this->assertTrue($event->isPropagationStopped(), 'this plugin claims the event once it handles it');
+    }
+
+    /**
+     * Tests that an action with no template is reported as an error and queues nothing.
+     *
+     * @return void
+     */
+    public function testQueueLogsErrorAndQueuesNothingForUnknownAction(): void
+    {
+        $event = new GenericEvent($this->serviceInfo('no_such_action'), [
+            'type' => self::OWNED_TYPE,
+            'output' => 'pre-existing;',
+        ]);
+
+        Plugin::getQueue($event);
+
+        $this->assertSame([], StubSmarty::$fetched, 'no template should be rendered for an unknown action');
+        $this->assertSame('pre-existing;', $event['output'], 'queue output must be left untouched');
+
+        $errors = FrameworkState::logsAtLevel('error');
+        $this->assertCount(1, $errors, 'a missing template should be logged as an error');
+        $this->assertStringContainsString('no_such_action', $errors[0]['message']);
+        $this->assertStringContainsString(Plugin::$name, $errors[0]['message']);
+    }
+
+    /**
+     * Tests that the queue hook ignores service types this plugin does not own.
+     *
+     * @return void
+     */
+    public function testQueueIgnoresForeignServiceTypes(): void
+    {
+        $event = new GenericEvent($this->serviceInfo('delete'), [
+            'type' => self::FOREIGN_TYPE,
+            'output' => 'pre-existing;',
+        ]);
+
+        Plugin::getQueue($event);
+
+        $this->assertSame([], StubSmarty::$fetched);
+        $this->assertSame('pre-existing;', $event['output']);
+        $this->assertFalse(
+            $event->isPropagationStopped(),
+            'another plugin must still get a chance to handle a service type this one does not own'
+        );
+    }
+
+    /**
+     * Builds the service info array the queue hook expects as its event subject.
+     *
+     * @param string $action
+     * @return array<string, mixed>
+     */
+    private function serviceInfo(string $action): array
+    {
+        return [
+            'action' => $action,
+            'vps_id' => 501,
+            'vps_custid' => 4242,
+            'vps_vzid' => '77',
+            'vps_hostname' => 'docker-host.example.com',
+            'server_info' => ['vps_name' => 'dockernode1'],
+        ];
     }
 
     /**
@@ -394,13 +571,77 @@ class PluginTest extends TestCase
     }
 
     /**
-     * Tests that the description mentions selling of DOCKER VPS types.
+     * Tests that the settings hook contributes this plugin's own settings only.
+     *
+     * This replaces testDescriptionMentionsSellingVps(), which asserted the description
+     * prose contained 'selling of DOCKER VPS' and broke on a casing change. What makes
+     * this plugin sellable is not the blurb, it is the settings hook: it must register a
+     * per-slice cost, default servers and out-of-stock switches, all scoped to the vps
+     * module and namespaced to docker so they cannot collide with a sibling VPS plugin.
      *
      * @return void
      */
-    public function testDescriptionMentionsSellingVps(): void
+    public function testSettingsHookRegistersDockerScopedSalesSettings(): void
     {
-        $this->assertStringContainsString('selling of DOCKER VPS', Plugin::$description);
+        $settings = new class {
+            /** @var list<array{kind: string, module: string, name: string}> */
+            public array $registered = [];
+
+            /** @var list<string> */
+            public array $targets = [];
+
+            public function setTarget($target)
+            {
+                $this->targets[] = (string) $target;
+            }
+
+            public function get_setting($name)
+            {
+                return '';
+            }
+
+            public function add_text_setting($module, $group, $name, $label = '', $help = '', $value = null)
+            {
+                $this->registered[] = ['kind' => 'text', 'module' => (string) $module, 'name' => (string) $name];
+            }
+
+            public function add_dropdown_setting($module, $group, $name, $label = '', $help = '', $value = null, $options = [], $labels = [])
+            {
+                $this->registered[] = ['kind' => 'dropdown', 'module' => (string) $module, 'name' => (string) $name];
+            }
+
+            public function add_select_master($module, $group, $module2, $name, $label = '', $value = null, $type = null, $location = null)
+            {
+                $this->registered[] = ['kind' => 'select_master', 'module' => (string) $module, 'name' => (string) $name];
+            }
+        };
+
+        Plugin::getSettings(new GenericEvent($settings));
+
+        $names = array_column($settings->registered, 'name');
+        $this->assertNotEmpty($names, 'the settings hook must register settings');
+        $this->assertContains('vps_slice_docker_cost', $names, 'per-slice pricing must be configurable');
+        $this->assertContains('new_vps_docker_server', $names, 'a default server must be configurable');
+        $this->assertContains('outofstock_docker', $names, 'sales must be switchable off');
+
+        foreach ($names as $name) {
+            $this->assertMatchesRegularExpression(
+                '/docker/',
+                $name,
+                "setting '{$name}' must be namespaced to docker so it cannot collide with another VPS plugin"
+            );
+        }
+        foreach ($settings->registered as $setting) {
+            $this->assertSame(
+                Plugin::$module,
+                $setting['module'],
+                "setting '{$setting['name']}' must be scoped to the ".Plugin::$module.' module'
+            );
+        }
+
+        // The hook scopes itself to the module and hands the global scope back afterwards,
+        // otherwise every setting a later plugin registers would land under this module.
+        $this->assertSame(['module', 'global'], $settings->targets);
     }
 
     /**
