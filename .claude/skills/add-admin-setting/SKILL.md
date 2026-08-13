@@ -1,6 +1,6 @@
 ---
 name: add-admin-setting
-description: Adds a new admin setting inside getSettings() in src/Plugin.php using add_text_setting(), add_select_master(), or add_dropdown_setting(). Use when user says 'add setting', 'new config option', 'admin panel field', or adds a new per-datacenter control. Do NOT use for adding event hooks or queue actions. NOTE: for a plugin's contract/behavioral tests (tests/ContractTest.php, the shared harness, composer myadmin:scaffold-tests) use the plugin-contract-tests skill instead — this skill's reflection-only guidance predates that harness.
+description: Adds a new admin setting inside getSettings() in src/Plugin.php using add_text_setting(), add_select_master(), or add_dropdown_setting(). Use when user says 'add setting', 'new config option', 'admin panel field', or adds a new per-datacenter control. Do NOT use for adding event hooks or queue actions. For a plugin's contract or behavioral tests (tests/ContractTest.php, the shared harness, composer myadmin:scaffold-tests) use the plugin-contract-tests skill instead — this skill's reflection-only guidance predates that harness.
 ---
 <!-- myadmin-contract-harness-notice -->
 > ### ⚠️ Read this before the rest of the file

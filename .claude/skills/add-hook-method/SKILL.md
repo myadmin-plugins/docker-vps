@@ -1,6 +1,6 @@
 ---
 name: add-hook-method
-description: Adds a new event hook handler to src/Plugin.php with the correct public static signature, DOCKER/DOCKER_STORAGE service type guard, myadmin_log call, and stopPropagation(). Use when user says 'add hook', 'new event handler', 'handle event', or adds a new lifecycle event. Do NOT use for modifying getSettings or editing existing hook logic. NOTE: for a plugin's contract/behavioral tests (tests/ContractTest.php, the shared harness, composer myadmin:scaffold-tests) use the plugin-contract-tests skill instead — this skill's reflection-only guidance predates that harness.
+description: Adds a new event hook handler to src/Plugin.php with the correct public static signature, DOCKER/DOCKER_STORAGE service type guard, myadmin_log call, and stopPropagation(). Use when user says 'add hook', 'new event handler', 'handle event', or adds a new lifecycle event. Do NOT use for modifying getSettings or editing existing hook logic. For a plugin's contract or behavioral tests (tests/ContractTest.php, the shared harness, composer myadmin:scaffold-tests) use the plugin-contract-tests skill instead — this skill's reflection-only guidance predates that harness.
 ---
 <!-- myadmin-contract-harness-notice -->
 > ### ⚠️ Read this before the rest of the file
